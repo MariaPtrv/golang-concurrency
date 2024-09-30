@@ -2,15 +2,22 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
+	"time"
 )
 
-var wg sync.WaitGroup
-
 func main() {
+	var wg sync.WaitGroup
 	ch := make(chan int)
-	sig := make(chan struct{})
-	wg := sync.WaitGroup{}
+	sigCh := make(chan os.Signal, 1)
+	defer close(sigCh)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGTERM)
+
+	wg = sync.WaitGroup{}
 
 	wg.Add(1)
 	go func() {
@@ -24,20 +31,36 @@ func main() {
 				}
 				fmt.Println(v)
 
-			case <-sig:
+			case <-sigCh:
 				fmt.Println("DONE")
 				return
 			}
 		}
 	}()
 
-	for i := 0; i < 5; i++ {
-		ch <- i
-	}
-	sig <- struct{}{}
+	go func() {
+		for {
+			time.Sleep(500 * time.Millisecond)
+			select {
+			default:
+				i := rand.Int()
+				ch <- i
+				// i2 := rand.Int()
+				// ch2 <- i2
+				// i3 := rand.Int()
+				// ch3 <- i3
+				// i4 := rand.Int()
+				// ch4 <- i4
+			}
+		}
+	}()
 
-	close(ch)
+	// for i := 0; i < 5; i++ {
+	// 	ch <- i
+	// }
+	// sig <- struct{}{}
 
 	wg.Wait()
+	close(ch)
 
 }
