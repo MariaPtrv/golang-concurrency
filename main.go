@@ -1,80 +1,79 @@
 package main
 
 import (
-	"fmt"
-	"strconv"
-	"strings"
-	"sync"
+  "fmt"
+  "sync"
+  "time"
 )
 
-type cuncurrentMap struct {
-	Map     map[string]int
-	rwMutex sync.RWMutex
+func exampleRangeChannel() {
+  ch := make(chan int)
+
+  wg := sync.WaitGroup{}
+  wg.Add(1)
+  go func() {
+    defer wg.Done()
+    for k := range ch {
+      fmt.Println(k)
+    }
+    fmt.Println("exit")
+  }()
+
+  for i := 1; i <= 10; i++ {
+    ch <- i
+  }
+  fmt.Println("before close")
+  close(ch)
+  fmt.Println("after close")
+  wg.Wait()
+  fmt.Println("end")
 }
 
-func (c *cuncurrentMap) get(key string) (int, bool) {
-	c.rwMutex.RLock()
-	defer c.rwMutex.RUnlock()
-	v, has := c.Map[key]
+func exampleSelectChannelClosed() {
+  ch := make(chan int)
 
-	return v, has
-}
+  wg := sync.WaitGroup{}
+  wg.Add(1)
+  go func() {
+    defer wg.Done()
+    ticker := time.NewTicker(1 * time.Second)
+    defer ticker.Stop()
+  Loop:
+    for {
+      select {
+      // этот select будет блокировать цикл for пока канал не закроется
+      case val, ok := <-ch:
+        //time.Sleep(500 * time.Millisecond)
+        if !ok {
+          fmt.Println("done")
+          break Loop
+        }
+        fmt.Println(val)
+        // этот тикер остановит выполнение селекта, когда выйдет время и ветвь селекта case val, ok := <-ch будет разблокирована
+      case <-ticker.C:
+        fmt.Println("time has ended")
+        break Loop
+        // тут можно послушать контекст, если нужно выключить по сигналу горутину. В таком случае нужно использовать селект вместо цикла для заполнения канала 
+      }
+    }
+    fmt.Println("exit")
+  }()
 
-func (c *cuncurrentMap) set(key string, val int) {
-	c.rwMutex.Lock()
-	defer c.rwMutex.Unlock()
-	c.Map[key] = val
-
+  for i := 1; i <= 1; i++ {
+    ch <- i
+    //time.Sleep(1 * time.Second)
+  }
+  fmt.Println("before close")
+  // срабатывание тикера в горутине
+  time.Sleep(1500 * time.Millisecond)
+  close(ch)
+  fmt.Println("after close")
+  wg.Wait()
+  fmt.Println("end")
 }
 
 func main() {
-	var wg sync.WaitGroup
-
-	m := &cuncurrentMap{
-		Map: make(map[string]int),
-	}
-
-	m.set("one", 1)
-	v, _ := m.get("one")
-	//_, _ = m.get("one")
-	fmt.Println(v)
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for i := 1; i < 10; i++ {
-			key := strings.Join([]string{"key", strconv.Itoa(i)}, " ")
-
-			//fmt.Println("Lock write")
-			m.set(key, i)
-
-		}
-	}()
-
-	wg.Add(1)
-	go func() {
-		// t := time.NewTicker(time.Second * 2)
-		// <-t.C
-
-		defer wg.Done()
-		for i := 1; i < 10; i++ {
-			key := strings.Join([]string{"key", strconv.Itoa(i)}, " ")
-
-			//fmt.Println("Lock read")
-			v, _ := m.get(key)
-
-			fmt.Println(v)
-		}
-	}()
-
-	// wg.Add(1)
-	// go func() {
-	// 	defer wg.Done()
-	// 	for i := 1; i < 10; i++ {
-	// 		key := strings.Join([]string{"key 2", strconv.Itoa(i)}, " ")
-	// 		m.set(key, i)
-	// 	}
-	// }()
-
-	wg.Wait()
+  exampleRangeChannel()
+  fmt.Println("-------------")
+  exampleSelectChannelClosed()
 }
